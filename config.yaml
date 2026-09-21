@@ -1,0 +1,57 @@
+# Lecture Transcriber — configuration
+# This is the only file you should need to edit.
+
+# Paths (relative to this config file's directory)
+input_dir: input
+output_dir: output
+models_dir: models
+
+# STT (whisper.cpp)
+stt:
+  whisper_binary: whisper-cli
+  # https://huggingface.co/ggerganov/whisper.cpp/resolve/main/<filename>
+  model_url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+  model_filename: ggml-large-v3-turbo.bin
+  # "auto" = let whisper detect the language. Or set "zh", "en", "ja", ...
+  language: auto
+  sample_rate: 16000
+
+# LLM (Ollama — local daemon at localhost:11434)
+llm:
+  model: qwen3:14b
+  base_url: http://localhost:11434
+  temperature: 0.2
+  num_ctx: 8192
+  num_predict: 4096
+  timeout_seconds: 300
+
+# Chunking
+# ~3 characters per token (estimate); chunks are split on sentence boundaries.
+chunk_tokens: 3000
+overlap_sentences: 1
+
+# Options
+# Optional noise reduction. Requires the "denoise" poetry group:
+#   poetry install --with denoise
+enable_denoise: false
+
+# Language the summary is written in (e.g. "English", "Traditional Chinese")
+summary_language: English
+
+# Prompts — feel free to tune the wording.
+prompts:
+  translate: |
+    Translate the following lecture transcript into natural, fluent English.
+    Be faithful to the meaning; do not add, remove, or explain content.
+    Output only the translation, with no preamble or commentary.
+
+  summary_chunk: |
+    You are summarizing part of a university lecture. Write concise bullet
+    points capturing the key points in this chunk. Output only the bullets,
+    in English, no preamble.
+
+  summary_all: |
+    The following are bullet summaries of consecutive segments of one lecture.
+    Combine them into a single coherent, well-organized summary with short
+    sections and headings. Keep it concise but complete. Output only the
+    combined summary, in English.

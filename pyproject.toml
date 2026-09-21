@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "lecture-transcriber"
+version = "0.1.0"
+description = "Local, offline audio-to-text pipeline: whisper.cpp STT + Ollama LLM for transcription, translation, and summary."
+authors = ["Bobby Pehtrus"]
+readme = "README.md"
+packages = [{ include = "scripts" }]
+
+[tool.poetry.dependencies]
+python = ">=3.10"
+pyyaml = "^6.0"
+
+[tool.poetry.group.denoise]
+optional = true
+
+[tool.poetry.group.denoise.dependencies]
+noisereduce = "*"
+soundfile = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

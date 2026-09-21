@@ -1,0 +1,1 @@
+"""scripts package — shared modules for the lecture transcriber pipeline."""

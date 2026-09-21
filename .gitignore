@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+
+# large/generated artifacts
+input/
+output/
+models/
+
+.DS_Store

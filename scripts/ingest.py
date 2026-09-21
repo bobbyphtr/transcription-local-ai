@@ -4,6 +4,26 @@ from pathlib import Path
 from scripts.common import run
 
 
+def probe_duration(input_path) -> float:
+    """Return the media length in seconds via ffprobe (0.0 if it fails)."""
+    proc = run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "csv=p=0",
+            str(input_path),
+        ]
+    )
+    try:
+        return float(proc.stdout.strip())
+    except (AttributeError, ValueError):
+        return 0.0
+
+
 def to_wav(input_path, wav_path: Path, sample_rate=16000, channels=1):
     cmd = [
         "ffmpeg",
@@ -29,9 +49,9 @@ def denoise_wav(wav_path: Path):
         raise RuntimeError(
             "noisereduce missing — install the denoise group: poetry install --with denoise"
         )
-    data, sr = sf.read(wav_path, dtype="float32")
-    reduced = nr.reduce_noise(y=data, sr=sr)
-    sf.write(wav_path, reduced, sr)
+    audio_data, sample_rate = sf.read(wav_path, dtype="float32")
+    reduced = nr.reduce_noise(y=audio_data, sr=sample_rate)
+    sf.write(wav_path, reduced, sample_rate)
     return wav_path
 
 

@@ -36,9 +36,9 @@ def download_with_progress(url, dest: Path):
 
 def pull_ollama(model: str):
     print(f"ollama pull {model}  (this can take a while)")
-    rc = subprocess.call(["ollama", "pull", model])
-    if rc != 0:
-        raise RuntimeError(f"ollama pull {model} failed (exit {rc})")
+    return_code = subprocess.call(["ollama", "pull", model])
+    if return_code != 0:
+        raise RuntimeError(f"ollama pull {model} failed (exit {return_code})")
     print(f"ollama model '{model}' ready.")
 
 
@@ -48,7 +48,7 @@ def main(argv=None):
     parser.add_argument("--force", action="store_true", help="Re-download whisper model even if present")
     args = parser.parse_args(argv)
 
-    cfg, root = load_config(args.config)
+    cfg, _ = load_config(args.config)
     stt = cfg.get("stt", {})
     llm = cfg.get("llm", {})
 

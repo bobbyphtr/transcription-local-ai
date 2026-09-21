@@ -23,23 +23,23 @@ def parse_segments(json_path: Path, txt_path: Path):
 
 def _normalize(raw_segments):
     segments = []
-    for seg in raw_segments:
-        text = str(seg.get("text", "")).strip()
+    for segment in raw_segments:
+        text = str(segment.get("text", "")).strip()
         if not text:
             continue
         segments.append(
             {
-                "start": _num(seg.get("start")),
-                "end": _num(seg.get("end")),
+                "start": _num(segment.get("start")),
+                "end": _num(segment.get("end")),
                 "text": text,
             }
         )
     return segments
 
 
-def _num(v):
+def _num(value):
     try:
-        return float(v)
+        return float(value)
     except (TypeError, ValueError):
         return None
 

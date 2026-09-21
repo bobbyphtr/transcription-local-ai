@@ -18,7 +18,7 @@ class OllamaClient:
     def tags(self):
         with self._open("/api/tags") as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        return [m.get("name", "") for m in data.get("models", [])]
+        return [model_info.get("name", "") for model_info in data.get("models", [])]
 
     def model_available(self, model):
         prefix = model.split(":")[0]
@@ -45,13 +45,13 @@ class OllamaClient:
 
 
 def split_sentences(text):
-    parts = re.split(f"({SENTENCE_END.pattern}+)", text)
+    pieces = re.split(f"({SENTENCE_END.pattern}+)", text)
     sentences = []
-    for i in range(0, len(parts), 2):
-        if i + 1 < len(parts):
-            sentence = (parts[i] + parts[i + 1]).strip()
+    for piece_index in range(0, len(pieces), 2):
+        if piece_index + 1 < len(pieces):
+            sentence = (pieces[piece_index] + pieces[piece_index + 1]).strip()
         else:
-            sentence = parts[i].strip()
+            sentence = pieces[piece_index].strip()
         if sentence:
             sentences.append(sentence)
     return sentences
@@ -81,9 +81,9 @@ def chunk_text(text, max_chars, overlap_sentences=1):
     return chunks
 
 
-def drop_first_sentences(text, n):
+def drop_first_sentences(text, count):
     sentences = split_sentences(text)
-    return " ".join(sentences[n:]).strip() if n < len(sentences) else ""
+    return " ".join(sentences[count:]).strip() if count < len(sentences) else ""
 
 
 def _as_bullets(text):
@@ -91,11 +91,14 @@ def _as_bullets(text):
     return "\n".join(item if item.startswith(("-", "*")) else f"- {item}" for item in items)
 
 
-def translate(client, model, prompt, text, max_chars, overlap_sentences, options):
+def translate(client, model, prompt, chunks, overlap_sentences, options, on_progress=None):
     parts = []
-    for i, (_, _, chunk) in enumerate(chunk_text(text, max_chars, overlap_sentences)):
+    total_chunks = len(chunks)
+    for chunk_number, (chunk_start, chunk_end, chunk) in enumerate(chunks):
+        if on_progress:
+            on_progress(chunk_number + 1, total_chunks)
         out = client.chat(model, prompt, chunk, options=options)
-        if i == 0:
+        if chunk_number == 0:
             parts.append(out)
         else:
             remaining = drop_first_sentences(out, overlap_sentences)
@@ -104,8 +107,12 @@ def translate(client, model, prompt, text, max_chars, overlap_sentences, options
     return "\n\n".join(parts)
 
 
-def summarize(client, model, chunk_prompt, all_prompt, text, max_chars, options):
-    bullets = [_as_bullets(client.chat(model, chunk_prompt, chunk, options=options))
-               for _, _, chunk in chunk_text(text, max_chars, 0)]
+def summarize(client, model, chunk_prompt, all_prompt, chunks, options, on_progress=None):
+    bullets = []
+    total_chunks = len(chunks)
+    for chunk_number, (chunk_start, chunk_end, chunk) in enumerate(chunks):
+        if on_progress:
+            on_progress(chunk_number + 1, total_chunks)
+        bullets.append(_as_bullets(client.chat(model, chunk_prompt, chunk, options=options)))
     combined = "\n\n".join(bullets)
     return client.chat(model, all_prompt, combined, options=options)

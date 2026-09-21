@@ -59,8 +59,8 @@ def check_ollama_server(cfg):
     base = cfg.get("llm", {}).get("base_url", "http://localhost:11434")
     try:
         tags = _http_json(f"{base}/api/tags", timeout=5)
-        n = len(tags.get("models", []))
-        return "ok", f"ollama server up ({base}), {n} model(s) loaded"
+        model_count = len(tags.get("models", []))
+        return "ok", f"ollama server up ({base}), {model_count} model(s) loaded"
     except Exception:
         return "fail", f"ollama server unreachable at {base} — is 'ollama serve' running?"
 
@@ -112,10 +112,10 @@ def check_env(config=None):
     for name, (status, message) in results.items():
         print(f"  [{STATUS_LABELS[status]}] {name}: {message}")
         problems.append((name, status, message))
-    n_fail = sum(1 for _, s, _ in problems if s == "fail")
-    n_warn = sum(1 for _, s, _ in problems if s == "warn")
-    print(f"\n{n_fail} failure(s), {n_warn} warning(s)")
-    if n_fail:
+    failure_count = sum(1 for _, status, _ in problems if status == "fail")
+    warning_count = sum(1 for _, status, _ in problems if status == "warn")
+    print(f"\n{failure_count} failure(s), {warning_count} warning(s)")
+    if failure_count:
         raise RuntimeError("Environment has failures — see messages above.")
     return results
 

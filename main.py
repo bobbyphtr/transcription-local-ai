@@ -9,6 +9,7 @@ from scripts import export as export_mod
 from scripts import ingest as ingest_mod
 from scripts import llm as llm_mod
 from scripts import transcribe as transcribe_mod
+from scripts.progress import StageTimer, format_elapsed
 from scripts.common import (
     ConfigError,
     load_config,
@@ -39,9 +40,10 @@ def collect_inputs(input_dir: Path):
     return sorted(files)
 
 
-def process_file(cfg, audio_path, model_path, overwrite=False):
+def process_file(cfg, audio_path, model_path, overwrite=False, file_index=1, file_total=1):
     output_dir = cfg["output_dir"]
     audio_name = audio_path.stem
+    step = f"[{file_index}/{file_total}] {audio_path.name}"
 
     if not overwrite and export_mod.already_done(output_dir, audio_name):
         logger.info("skip (done): %s", audio_name)
@@ -63,35 +65,46 @@ def process_file(cfg, audio_path, model_path, overwrite=False):
     if not client.model_available(model):
         raise RuntimeError(f"LLM model '{model}' not present — run: ollama pull {model}")
 
-    logger.info("processing: %s", audio_path.name)
+    print(f"\n{step}", file=sys.stderr)
+
     with tempfile.TemporaryDirectory(prefix="lt-") as tmp:
         tmp_path = Path(tmp)
-        wav_path = ingest_mod.ingest(
-            audio_path,
-            tmp_path / (audio_name + ".wav"),
-            sample_rate=stt.get("sample_rate", 16000),
-            enable_denoise=cfg.get("enable_denoise", False),
-        )
-        segments = transcribe_mod.transcribe(
-            wav_path,
-            model_path,
-            language=stt.get("language", "auto"),
-            binary=stt.get("whisper_binary", "whisper-cli"),
-        )
+        audio_duration = ingest_mod.probe_duration(audio_path)
+
+        with StageTimer(f"  {step}  ·  ffmpeg → wav"):
+            wav_path = ingest_mod.ingest(
+                audio_path,
+                tmp_path / (audio_name + ".wav"),
+                sample_rate=stt.get("sample_rate", 16000),
+                enable_denoise=cfg.get("enable_denoise", False),
+            )
+
+        with StageTimer(f"  {step}  ·  whisper (audio {format_elapsed(audio_duration)})"):
+            segments = transcribe_mod.transcribe(
+                wav_path,
+                model_path,
+                language=stt.get("language", "auto"),
+                binary=stt.get("whisper_binary", "whisper-cli"),
+            )
         plain_text = export_mod.ordered_text(segments)
 
-        logger.info("translating (%d segments)…", len(segments))
-        translation = llm_mod.translate(
-            client, model,
-            cfg["prompts"]["translate"], plain_text,
-            max_chars, overlap, options,
-        )
-        logger.info("summarizing…")
-        summary = llm_mod.summarize(
-            client, model,
-            cfg["prompts"]["summary_chunk"], cfg["prompts"]["summary_all"],
-            plain_text, max_chars, options,
-        )
+        translate_chunks = llm_mod.chunk_text(plain_text, max_chars, overlap)
+        with StageTimer(f"  {step}  ·  translate → English") as stage:
+            translation = llm_mod.translate(
+                client, model,
+                cfg["prompts"]["translate"], translate_chunks,
+                overlap, options,
+                on_progress=stage.set_progress,
+            )
+
+        summary_chunks = llm_mod.chunk_text(plain_text, max_chars, 0)
+        with StageTimer(f"  {step}  ·  summarize") as stage:
+            summary = llm_mod.summarize(
+                client, model,
+                cfg["prompts"]["summary_chunk"], cfg["prompts"]["summary_all"],
+                summary_chunks, options,
+                on_progress=stage.set_progress,
+            )
 
     paths = export_mod.export(output_dir, audio_name, segments, translation, summary)
     for short, p in paths.items():
@@ -136,13 +149,19 @@ def main(argv=None):
         return 0
 
     results = {"done": 0, "skipped": 0, "failed": 0}
-    for audio in audio_files:
+    print(f"Processing {len(audio_files)} file(s)\n", file=sys.stderr)
+    for file_index, audio in enumerate(audio_files, start=1):
         if not audio.is_file():
             logger.error("not a file, skipping: %s", audio)
             results["failed"] += 1
             continue
         try:
-            status = process_file(cfg, audio, model_path, overwrite=args.overwrite)
+            status = process_file(
+                cfg, audio, model_path,
+                overwrite=args.overwrite,
+                file_index=file_index,
+                file_total=len(audio_files),
+            )
             results[status] += 1
         except Exception as e:
             results["failed"] += 1

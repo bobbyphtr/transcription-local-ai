@@ -12,21 +12,25 @@ stt:
   # https://huggingface.co/ggerganov/whisper.cpp/resolve/main/<filename>
   model_url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
   model_filename: ggml-large-v3-turbo.bin
-  # "auto" = let whisper detect the language. Or set "zh", "en", "ja", ...
-  language: auto
+  # Language spoken in the course (override per run with --language):
+  #   zh   = Mandarin course (transcribed in Chinese, then translated to English)
+  #   en   = English course (translation step is skipped)
+  #   auto = let whisper guess — not recommended: it misdetects Mandarin as English
+  language: zh
   sample_rate: 16000
 
 # LLM (Ollama — local daemon at localhost:11434)
 llm:
-  model: qwen3:14b
+  model: gemma4:31b-mlx
   base_url: http://localhost:11434
   temperature: 0.2
-  num_ctx: 8192
+  num_ctx: 16384
   num_predict: 4096
   timeout_seconds: 300
 
 # Chunking
-# ~3 characters per token (estimate); chunks are split on sentence boundaries.
+# ~1.5 characters per token (Chinese estimate) → chunks of ~4500 characters,
+# split on sentence boundaries.
 chunk_tokens: 3000
 overlap_sentences: 1
 
@@ -46,12 +50,20 @@ prompts:
     Output only the translation, with no preamble or commentary.
 
   summary_chunk: |
-    You are summarizing part of a university lecture. Write concise bullet
-    points capturing the key points in this chunk. Output only the bullets,
-    in English, no preamble.
+    You are writing detailed study notes for one part of a university lecture.
+    Capture every concept explained, with its definitions, examples, formulas
+    or steps, and the reasoning behind them. Write short explanatory
+    paragraphs; use bullets only for genuine lists. Write in English and
+    output only the notes, with no preamble.
 
   summary_all: |
-    The following are bullet summaries of consecutive segments of one lecture.
-    Combine them into a single coherent, well-organized summary with short
-    sections and headings. Keep it concise but complete. Output only the
-    combined summary, in English.
+    The following are study notes for consecutive parts of one lecture,
+    separated by "---". Merge them into one comprehensive lecture summary in
+    Markdown:
+    1. An overview of 2-3 sentences.
+    2. One "##" section per topic, in lecture order, written as explanatory
+       paragraphs that keep the definitions, examples and reasoning.
+    3. A "## Key terms" list with a one-line definition for each term.
+    4. A "## Key takeaways" list.
+    Remove duplication but do not compress away detail. Output only the
+    summary, in English.

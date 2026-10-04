@@ -46,7 +46,10 @@ def _num(value):
 
 def transcribe(wav_path, model_path: Path, language="auto", binary="whisper-cli", timeout=1800):
     base = wav_path.with_suffix("")
-    cmd = [binary, "-m", str(model_path), "-f", str(wav_path), "-otxt", "-oj", "-of", str(base)]
+    # -mc 0: don't feed previous text back as context; stops whisper getting
+    # stuck repeating one line for the rest of the audio.
+    cmd = [binary, "-m", str(model_path), "-f", str(wav_path), "-mc", "0",
+           "-otxt", "-oj", "-of", str(base)]
     if language and language != "auto":
         cmd += ["-l", language]
     run(cmd, timeout=timeout)

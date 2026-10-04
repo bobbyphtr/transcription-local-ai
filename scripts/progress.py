@@ -78,6 +78,13 @@ class StageTimer:
             self._total = total
             self._note = note
 
+    def warn(self, message):
+        """Print a warning on its own line without garbling the live timer."""
+        if self.live:
+            self.stream.write("\r" + ANSI_ERASE_LINE)
+        self.stream.write(f"  ⚠ {message}\n")
+        self.stream.flush()
+
     def _tick(self):
         while not self._stop_event.wait(0.2):
             with self._state_lock:

@@ -9,20 +9,33 @@ from scripts import export as export_mod
 from scripts import ingest as ingest_mod
 from scripts import llm as llm_mod
 from scripts import transcribe as transcribe_mod
-from scripts.progress import StageTimer, format_elapsed
 from scripts.common import (
     ConfigError,
     load_config,
     resolve_model_path,
+    run,
     setup_logging,
     which,
 )
+from scripts.progress import StageTimer, format_elapsed
+
 from scripts.env_checks import check_env
 
 logger = logging.getLogger("main")
 
 AUDIO_EXTENSIONS = {".m4a", ".mp3", ".wav", ".aac", ".flac", ".ogg", ".wma"}
 MODEL_MISSING_HINT = "STT model missing — run: python -m scripts.setup_models"
+
+
+def stop_ollama(model, mode="model"):
+    """Free the LLM after a run. mode: none | model | daemon. Never fatal."""
+    if mode == "none":
+        return
+    if mode in ("model", "daemon"):
+        run(["ollama", "stop", model], check=False)
+    if mode == "daemon":
+        run(["brew", "services", "stop", "ollama"], check=False)
+    logger.info("ollama shutdown: %s", mode)
 
 
 def preflight(cfg):
@@ -87,15 +100,25 @@ def process_file(cfg, audio_path, model_path, overwrite=False, file_index=1, fil
                 binary=stt.get("whisper_binary", "whisper-cli"),
             )
         plain_text = export_mod.ordered_text(segments)
+        path = export_mod.write_output(output_dir, audio_name, "transcription", plain_text)
+        logger.info("wrote transcription → %s", path)
 
-        translate_chunks = llm_mod.chunk_text(plain_text, max_chars, overlap)
-        with StageTimer(f"  {step}  ·  translate → English") as stage:
-            translation = llm_mod.translate(
-                client, model,
-                cfg["prompts"]["translate"], translate_chunks,
-                overlap, options,
-                on_progress=stage.set_progress,
-            )
+        if stt.get("language") == "en":
+            # English course: the transcript already is the English text.
+            print(f"  {step}  ·  translate skipped (English course)", file=sys.stderr)
+            translation = plain_text
+        else:
+            translate_chunks = llm_mod.chunk_text(plain_text, max_chars, overlap)
+            with StageTimer(f"  {step}  ·  translate → English") as stage:
+                translation = llm_mod.translate(
+                    client, model,
+                    cfg["prompts"]["translate"], translate_chunks,
+                    overlap, options,
+                    on_progress=stage.set_progress,
+                    on_warning=stage.warn,
+                )
+        path = export_mod.write_output(output_dir, audio_name, "translation", translation)
+        logger.info("wrote translation → %s", path)
 
         summary_chunks = llm_mod.chunk_text(plain_text, max_chars, 0)
         with StageTimer(f"  {step}  ·  summarize") as stage:
@@ -104,11 +127,11 @@ def process_file(cfg, audio_path, model_path, overwrite=False, file_index=1, fil
                 cfg["prompts"]["summary_chunk"], cfg["prompts"]["summary_all"],
                 summary_chunks, options,
                 on_progress=stage.set_progress,
+                on_warning=stage.warn,
             )
+        path = export_mod.write_output(output_dir, audio_name, "summary", summary + "\n")
+        logger.info("wrote summary → %s", path)
 
-    paths = export_mod.export(output_dir, audio_name, segments, translation, summary)
-    for short, p in paths.items():
-        logger.info("wrote %s → %s", short, p)
     return "done"
 
 
@@ -116,6 +139,19 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Transcribe lectures locally and offline.")
     parser.add_argument("--config", default=None, help="Path to config.yaml")
     parser.add_argument("--overwrite", action="store_true", help="Re-process files that already have output")
+    parser.add_argument(
+        "--shutdown",
+        default="model",
+        choices=["none", "model", "daemon"],
+        help="After the run: 'model' unloads the LLM from RAM (default), "
+        "'daemon' also stops the Ollama service, 'none' leaves everything running",
+    )
+    parser.add_argument(
+        "--language",
+        choices=["zh", "en", "auto"],
+        help="Language spoken in the course: 'zh' Mandarin, 'en' English (skips translation), "
+        "'auto' let whisper guess. Default: stt.language in config.yaml",
+    )
     parser.add_argument("files", nargs="*", help="Optional audio files (default: all in input/)")
     args = parser.parse_args(argv)
 
@@ -126,6 +162,8 @@ def main(argv=None):
         logger.error("%s", e)
         return 1
 
+    if args.language:
+        cfg.setdefault("stt", {})["language"] = args.language
     cfg["_root"] = root
     input_dir = (root / cfg["input_dir"]).resolve()
     cfg["output_dir"] = (root / cfg["output_dir"]).resolve()
@@ -168,6 +206,8 @@ def main(argv=None):
             logger.error("FAILED %s — %s", audio.name, e)
 
     logger.info("finished: %s", results)
+    if args.shutdown != "none":
+        stop_ollama(cfg["llm"]["model"], mode=args.shutdown)
     return 1 if results["failed"] else 0
 
 

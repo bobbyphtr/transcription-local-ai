@@ -1,4 +1,4 @@
-"""Export: write the three output files into output/<audio-name>/."""
+"""Export: write each output file into output/<audio-name>/ as its stage finishes."""
 from pathlib import Path
 
 OUTPUT_FILES = {
@@ -21,10 +21,8 @@ def ordered_text(segments):
     return "\n".join(seg["text"] for seg in segments)
 
 
-def export(output_dir, audio_name, segments, translation, summary):
-    paths = output_paths(output_dir, audio_name)
-    paths["transcription"].parent.mkdir(parents=True, exist_ok=True)
-    paths["transcription"].write_text(ordered_text(segments), encoding="utf-8")
-    paths["translation"].write_text(translation, encoding="utf-8")
-    paths["summary"].write_text(summary + "\n", encoding="utf-8")
-    return paths
+def write_output(output_dir, audio_name, key, text):
+    path = output_paths(output_dir, audio_name)[key]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path

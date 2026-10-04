@@ -1,4 +1,4 @@
-# Lecture Transcriber
+# Local AI Transcriber
 
 Local, **fully offline** audio-to-text pipeline for course recordings:
 `audio file` → `transcription.txt` (original language) + `transcription_en.txt` (English) + `summary.md`.
